@@ -1,0 +1,28 @@
+{
+  "name": "x",
+  "version": "0.0.1",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/altshiftab/x.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
+  },
+  "scripts": {
+    "build": "webpack --config webpack.config.mjs --stats-children",
+    "release": "npm run build && (cd dist && zip -r ../dist.zip .) && gh release create v\"$(jq -r '.version' package.json)\" dist.zip --title '' --notes '' && rm -f dist.zip"
+  },
+  "dependencies": {
+    "@altshiftab/styles": "^0.0.8",
+    "@altshiftab/web_components": "^0.0.63",
+    "lit": "^3.3.1"
+  },
+  "devDependencies": {
+    "@altshiftab/http_service_utils_js": "^0.0.5",
+    "@altshiftab/webpack_configuration": "^0.0.17",
+    "copy-webpack-plugin": "^13.0.1",
+    "typescript": "^5.9.2",
+    "webpack-cli": "^6.0.1"
+  }
+}
