@@ -5,4 +5,8 @@ import "@altshiftab/web_components/button";
 import "@altshiftab/web_components/footer"
 import "@altshiftab/web_components/header"
 
+import config from "../../../backend/config.json";
+
+type Config = typeof config
+
 addErrorEventListeners();

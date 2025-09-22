@@ -18,7 +18,7 @@ frontend-build:
 
 backend-build:
 	@echo "[backend] Building..."
-	cd backend && go generate && GOOS=linux go build -a -ldflags="-s -w -buildid=" -installsuffix cgo -o ../
+	cd backend && go generate && GOOS=linux go build -a -ldflags="-s -w -buildid=" -installsuffix cgo -o ../service
 
 publish: backend-publish
 

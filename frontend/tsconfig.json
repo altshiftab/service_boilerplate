@@ -1,5 +1,10 @@
 {
     "include": [
         "./src/scripts"
-    ]
+    ],
+    "compilerOptions": {
+        "resolveJsonModule": true,
+        "allowJs": true,
+        "esModuleInterop": true
+    }
 }
