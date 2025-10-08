@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -18,65 +17,19 @@ import (
 	"github.com/Motmedel/utils_go/pkg/http/mux/types/response"
 	"github.com/Motmedel/utils_go/pkg/http/mux/types/response_error"
 	jsonSchemaBodyParser "github.com/Motmedel/utils_go/pkg/http/mux/utils/body_parser/json/schema"
-	motmedelJson "github.com/Motmedel/utils_go/pkg/json"
-	motmedelJsonSchema "github.com/Motmedel/utils_go/pkg/json/schema"
+	altshiftGcpUtilsHttp "github.com/altshiftab/gcp_utils/pkg/http"
 	gcpUtilsHttp "github.com/altshiftab/gcp_utils/pkg/http"
 	gcpUtilsLog "github.com/altshiftab/gcp_utils/pkg/log"
 )
-
-//go:embed config.json
-var configData []byte
 
 type Input struct {
 	Token string   `json:"token,omitempty" required:"true" minLength:"1"`
 	_     struct{} `additionalProperties:"false"`
 }
 
-func getConfig() (*Config, error) {
-	var config Config
-	if err := json.Unmarshal(configData, &config); err != nil {
-		return nil, motmedelErrors.NewWithTrace(fmt.Errorf("json unmarshal: %w", err), configData)
-	}
-
-	configJsonSchema, err := motmedelJsonSchema.New(config)
-	if err != nil {
-		return nil, motmedelErrors.NewWithTrace(fmt.Errorf("json schema new: %w", err), config)
-	}
-
-	configMap, err := motmedelJson.ObjectToMap(config)
-	if err != nil {
-		return nil, motmedelErrors.NewWithTrace(fmt.Errorf("object to map: %w", err), config)
-	}
-
-	evaluationResult := configJsonSchema.Validate(configMap)
-	if evaluationResult == nil {
-		return nil, motmedelErrors.NewWithTrace(jsonSchemaBodyParser.ErrNilEvaluationResult)
-	}
-
-	evaluationResultList := evaluationResult.ToList()
-	if evaluationResultList == nil {
-		return nil, motmedelErrors.NewWithTrace(jsonSchemaBodyParser.ErrNilEvaluationResultList)
-	}
-
-	errorsMap := evaluationResultList.Errors
-	if len(errorsMap) != 0 {
-		return nil, motmedelErrors.ErrValidationError
-	}
-
-	return &config, nil
-}
-
 func main() {
 	logger := gcpUtilsLog.DefaultFatal(context.Background())
 	slog.SetDefault(logger.Logger)
-
-	config, err := getConfig()
-	if err != nil {
-		logger.FatalWithExitingMessage("An error occurred when getting the config.", err)
-	}
-	if config == nil {
-		logger.FatalWithExitingMessage("The config is nil.", nil)
-	}
 
 	bodyParser, err := jsonSchemaBodyParser.New[*Input]()
 	if err != nil {
@@ -103,7 +56,7 @@ func main() {
 
 	mux.Add(
 		&endpoint_specification.EndpointSpecification{
-			Path:   config.XEndpoint,
+			Path:   xEndpoint,
 			Method: http.MethodPost,
 			BodyParserConfiguration: &parsing.BodyParserConfiguration{
 				ContentType: "application/json",
@@ -115,6 +68,16 @@ func main() {
 			},
 		},
 	)
+
+	if err := altshiftGcpUtilsHttp.PatchTrustedTypes(mux, litHtmlTrustedTypesPolicy, webpackTrustedTypesPolicy); err != nil {
+		logger.FatalWithExitingMessage(
+			"An error occurred when patching trusted types.",
+			motmedelErrors.NewWithTrace(
+				fmt.Errorf("patch trusted types: %w", err),
+				mux, litHtmlTrustedTypesPolicy, webpackTrustedTypesPolicy,
+			),
+		)
+	}
 
 	if err := httpServer.ListenAndServe(); err != nil {
 		logger.FatalWithExitingMessage(

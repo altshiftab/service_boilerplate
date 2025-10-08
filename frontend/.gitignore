@@ -1,6 +1,7 @@
 *
 !/.gitignore
 !/package.json
+!/package-lock.json
 !/tsconfig.json
 !/webpack.config.mjs
 

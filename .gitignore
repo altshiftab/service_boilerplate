@@ -1,5 +1,6 @@
 *
 !/.gitignore
+!/config.json
 !/Makefile
 
 !/backend
