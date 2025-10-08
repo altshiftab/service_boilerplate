@@ -1,0 +1,8 @@
+{
+    "xEndpoint": "/api/x",
+    "routes": {
+        "about": "/about"
+    },
+    "litHtmlTrustedTypesPolicy": "lit-html",
+    "webpackTrustedTypesPolicy": "webpack"
+}
