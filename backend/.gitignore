@@ -1,16 +1,22 @@
 *
 !/.dockerignore
 !/.gitignore
-!/config.json
 !/Dockerfile
 !/go.mod
 !/go.sum
+!/service.go
+!/static_content_endpoint_specifications.go
 
+!/database/
+!/endpoints/
+!/type_generation/
+!/types/
 !/pkg/
 !/internal/
 
-!/config.go
-!/service.go
-!/static_content_endpoint_specifications.go
+!/database/**/*
+!/endpoints/**/*
+!/type_generation/**/*
+!/types/**/*
 !/pkg/**/*
 !/internal/**/*

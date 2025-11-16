@@ -1,0 +1,4 @@
+*
+!/.gitignore
+!/config.go
+!/endpoints.go

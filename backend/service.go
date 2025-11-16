@@ -2,46 +2,44 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
+	"slices"
 
 	motmedelEnv "github.com/Motmedel/utils_go/pkg/env"
 	motmedelErrors "github.com/Motmedel/utils_go/pkg/errors"
 	motmedelHttpErrors "github.com/Motmedel/utils_go/pkg/http/errors"
 	muxErrors "github.com/Motmedel/utils_go/pkg/http/mux/errors"
-	bodyParserAdapter "github.com/Motmedel/utils_go/pkg/http/mux/interfaces/body_parser/adapter"
-	"github.com/Motmedel/utils_go/pkg/http/mux/types/endpoint_specification"
-	"github.com/Motmedel/utils_go/pkg/http/mux/types/parsing"
-	"github.com/Motmedel/utils_go/pkg/http/mux/types/response"
-	"github.com/Motmedel/utils_go/pkg/http/mux/types/response_error"
-	jsonSchemaBodyParser "github.com/Motmedel/utils_go/pkg/http/mux/utils/body_parser/json/schema"
 	altshiftGcpUtilsHttp "github.com/altshiftab/gcp_utils/pkg/http"
 	gcpUtilsHttp "github.com/altshiftab/gcp_utils/pkg/http"
 	gcpUtilsLog "github.com/altshiftab/gcp_utils/pkg/log"
+	"github.com/altshiftab/x/endpoints"
 )
-
-type Input struct {
-	Token string   `json:"token,omitempty" required:"true" minLength:"1"`
-	_     struct{} `additionalProperties:"false"`
-}
 
 func main() {
 	logger := gcpUtilsLog.DefaultFatal(context.Background())
 	slog.SetDefault(logger.Logger)
 
-	bodyParser, err := jsonSchemaBodyParser.New[*Input]()
+	databaseUrl := motmedelEnv.GetEnvWithDefault("DATABASE_URL", "postgres://vph:change-this@127.0.0.1:5432/highlighter?sslmode=disable")
+
+	var err error
+	endpoints.Database, err = sql.Open("pgx", databaseUrl)
 	if err != nil {
-		logger.FatalWithExitingMessage(
-			"An error occurred when creating the body parser.",
-			fmt.Errorf("json schema body parser new: %w", err),
-		)
+		logger.FatalWithExitingMessage("An error occurred when opening the database.", err)
 	}
+	defer func() {
+		if err := endpoints.Database.Close(); err != nil {
+			logger.FatalWithExitingMessage("An error occurred when closing the database.", err, endpoints.Database)
+		}
+	}()
 
 	httpServer, mux, err := gcpUtilsHttp.MakeHttpService(
-		"localhost",
-		motmedelEnv.GetEnvWithDefault("PORT", "8080"),
+		endpoints.Domain,
+		endpoints.Port,
 		staticContentEndpointSpecifications,
 	)
 	if err != nil {
@@ -54,20 +52,22 @@ func main() {
 		logger.FatalWithExitingMessage("The mux is nil", muxErrors.ErrNilMux)
 	}
 
-	mux.Add(
-		&endpoint_specification.EndpointSpecification{
-			Path:   xEndpoint,
-			Method: http.MethodPost,
-			BodyParserConfiguration: &parsing.BodyParserConfiguration{
-				ContentType: "application/json",
-				MaxBytes:    4096,
-				Parser:      bodyParserAdapter.New(bodyParser),
-			},
-			Handler: func(request *http.Request, body []byte) (*response.Response, *response_error.ResponseError) {
-				return nil, nil
-			},
-		},
-	)
+	for _, endpointSpecificationGetter := range endpoints.EndpointSpecificationGetters {
+		mux.Add(endpointSpecificationGetter.GetEndpointSpecification())
+	}
+
+	indexEndpointSpecification := mux.Get("/", http.MethodGet)
+	indexRoutes := slices.Collect(maps.Values(endpoints.Routes))
+	if err := mux.DuplicateEndpointSpecification(indexEndpointSpecification, indexRoutes...); err != nil {
+		logger.FatalWithExitingMessage(
+			"An error occurred when duplicating the monitor endpoint specification.",
+			motmedelErrors.New(
+				fmt.Errorf("duplicate endpoint specification: %w", err),
+				indexEndpointSpecification,
+				indexRoutes,
+			),
+		)
+	}
 
 	if err := altshiftGcpUtilsHttp.PatchTrustedTypes(mux, litHtmlTrustedTypesPolicy, webpackTrustedTypesPolicy); err != nil {
 		logger.FatalWithExitingMessage(

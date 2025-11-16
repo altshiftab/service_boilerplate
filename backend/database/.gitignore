@@ -1,0 +1,4 @@
+*
+!/.gitignore
+!/atlas.hcl
+!/database.go

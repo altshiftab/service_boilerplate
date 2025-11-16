@@ -1,5 +1,6 @@
 {
-    "xEndpoint": "/api/x",
+    "domain": "localhost",
+    "port": "8080",
     "routes": {
         "about": "/about"
     },
