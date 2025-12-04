@@ -1,6 +1,6 @@
-.DEFAULT_GOAL := build
+.DEFAULT_GOAL := all
 
-.PHONY: all update frontend-update build types-build frontend-build backend-build publish backend-publish backend-publish-build db-apply db-diff db-inspect db-plan
+.PHONY: all update frontend-update build sql-build typescript-build frontend-build backend-build publish backend-publish backend-publish-build db-apply db-diff db-inspect db-plan db-ensure run-test-server
 
 all: update build
 
@@ -10,44 +10,53 @@ frontend-update:
 	@echo "[frontend] Updating..."
 	cd frontend && ncu --upgrade && npm update
 
-build: types-build frontend-build backend-build
+build: frontend-build backend-build
 
-types-build:
-	@echo "[types] Building..."
-	cd backend/type_generation && GOEXPERIMENT=jsonv2 go run type_generation.go --typescript-output ../../frontend/src/generated.ts --postgres-output ../database/generated.sql
+sql-build:
+	@echo "[sql] Building..."
+	cd .sql_generation && GOEXPERIMENT=jsonv2 go run sql_generation.go --out generated.sql
 
-frontend-build:
+typescript-build:
+	@echo "[typescript] Building..."
+	cd .typescript_generation && GOEXPERIMENT=jsonv2 go run typescript_generation.go --out ../frontend/src/scripts/generated.ts --domain "$$(jq -r '.domain' ../config.json)"
+
+frontend-build: typescript-build
 	@echo "[frontend] Building..."
 	cd frontend && npm run build
 
-backend-build:
+backend-build: sql-build
 	@echo "[backend] Building..."
-	#cd backend && go generate && GOOS=linux go build -a -ldflags="-s -w -buildid=" -installsuffix cgo -o ../service
-	cd backend && go generate && GOEXPERIMENT=jsonv2 go build -o ../service
+	cd backend && go generate ./... && GOEXPERIMENT=jsonv2 go build -o ../service
 
 publish: backend-publish
 
 backend-publish-build:
 	@echo "[backend] Building for publish..."
-	cd backend && podman build . --tag X
+	cd backend && podman build --secret id=git_token,src=git_token.txt . --tag X
 
 backend-publish: backend-publish-build
 	@echo "[backend] Publishing..."
-	podman tag X Y/X:latest && podman push Y/X:latest
+	podman tag X Y:latest && podman push Y:latest
 
-db-apply:
+db-apply: db-ensure
 	@echo "[database] Applying schema..."
-	grep -i "CREATE EXTENSION" backend/database/generated.sql | psql "$(DB_URL)" -f - > /dev/null 2>&1 || true
-	cd backend/database && atlas schema apply --env local --url "$(DB_URL)&search_path=public" --to file://generated.sql
+	cd .sql_generation && atlas schema apply --env local --url "$(DB_URL)&search_path=public" --to file://generated.sql
 
-db-diff:
+db-diff: db-ensure
 	@echo "[database] Calculating diff..."
-	cd backend/database && atlas schema diff --env local --from "$(DB_URL)&search_path=public" --to file://generated.sql
+	cd .sql_generation && atlas schema diff --env local --from "$(DB_URL)&search_path=public" --to file://generated.sql
 
-db-inspect:
+db-inspect: db-ensure
 	@echo "[database] Inspecting active schema..."
-	cd backend/database && atlas schema inspect --env local --url "$(DB_URL)&search_path=public"
+	cd .sql_generation && atlas schema inspect --env local --url "$(DB_URL)&search_path=public"
 
-db-plan:
+db-plan: db-ensure
 	@echo "[database] Planning schema changes..."
-	cd backend/database && atlas schema apply --env local --url "$(DB_URL)&search_path=public" --to file://generated.sql --dry-run
+	cd .sql_generation && atlas schema apply --env local --url "$(DB_URL)&search_path=public" --to file://generated.sql --dry-run
+
+db-ensure:
+	@echo "[database] Ensuring database exists..."
+	@DB_NAME=$$(printf "%s" "$(DB_URL)" | sed -E 's#.*://[^/]+/([^?]+).*#\1#'); \
+	ADMIN_URL=$$(printf "%s" "$(DB_URL)" | sed -E 's#(.*://[^/]+)/[^?]+(.*)#\1/postgres\2#'); \
+	psql "$$ADMIN_URL" -tAc "SELECT 1 FROM pg_database WHERE datname = '$$DB_NAME'" | grep -q 1 && echo "[database] Database '$$DB_NAME' exists." || (echo "[database] Creating database '$$DB_NAME'..." && psql "$$ADMIN_URL" -c "CREATE DATABASE \"$$DB_NAME\"")
+	grep -i "CREATE EXTENSION" .sql_generation/generated.sql | psql "$(DB_URL)" -f - > /dev/null 2>&1 || true

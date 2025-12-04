@@ -3,5 +3,7 @@
 !/config.json
 !/Makefile
 
+!/.sql_generation
+!/.typescript_generation
 !/backend
 !/frontend
