@@ -1,0 +1,6 @@
+*
+!/.gitignore
+!/atlas.hcl
+!/go.mod
+!/go.sum
+!/sql_generation.go
